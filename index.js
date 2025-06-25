@@ -18,7 +18,9 @@ const corsOptions = {
       'https://landing-one-ten.vercel.app',
       'https://landing-one-ten.vercel.app/',
       'https://landing-two-six.vercel.app/',
-      'https://landing-two-six.vercel.app'
+      'https://landing-two-six.vercel.app',
+      'https://landing-three-two.vercel.app',
+      'https://landing-three-two.vercel.app/',
     ];
     
     // Agregar dominios desde variables de entorno
