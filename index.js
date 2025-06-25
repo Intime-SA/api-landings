@@ -16,7 +16,9 @@ const corsOptions = {
       'http://localhost:3000', 
       'http://localhost:3003',
       'https://landing-one-ten.vercel.app',
-      'https://landing-one-ten.vercel.app/'
+      'https://landing-one-ten.vercel.app/',
+      'https://landing-two-six.vercel.app/',
+      'https://landing-two-six.vercel.app'
     ];
     
     // Agregar dominios desde variables de entorno
