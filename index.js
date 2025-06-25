@@ -7,12 +7,42 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3003;
 
-// Middleware CORS para permitir peticiones cross-origin
-app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3003', 'https://landing-one-ten.vercel.app'],
+// Configuración de CORS para desarrollo y producción
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Lista de dominios permitidos
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000', 
+      'http://localhost:3003',
+      'https://landing-one-ten.vercel.app',
+      'https://landing-one-ten.vercel.app/'
+    ];
+    
+    // Agregar dominios desde variables de entorno
+    if (process.env.ALLOWED_ORIGINS) {
+      allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
+    }
+    
+    // Permitir requests sin origin (como Postman, curl, etc.)
+    if (!origin) return callback(null, true);
+    
+    // Verificar si el origin está permitido
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS bloqueado para origin:', origin);
+      callback(new Error('No permitido por CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 200
+};
+
+// Middleware CORS
+app.use(cors(corsOptions));
 
 // Middleware para analizar JSON
 app.use(bodyParser.json());
