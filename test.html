@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Conversiones Facebook</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background-color: #1877f2;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background-color: #166fe5;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Test de Conversiones Facebook</h1>
+        <p>Haz clic en los botones para probar el envío de eventos a la API de Conversiones de Facebook:</p>
+        
+        <button onclick="testPurchase()">Simular Compra (Test)</button>
+        <button onclick="sendCustomEvent()">Enviar Evento Personalizado</button>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testPurchase() {
+            try {
+                const response = await fetch('/test-purchase', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const result = await response.json();
+                showResult(result, response.ok);
+            } catch (error) {
+                showResult({ error: error.message }, false);
+            }
+        }
+
+        async function sendCustomEvent() {
+            const customEvent = {
+                event_name: "Purchase",
+                event_time: Math.floor(Date.now() / 1000),
+                action_source: "website",
+                user_data: {
+                    em: ["7b17fb0bd173f625b58636fb796407c22b3d16fc78302d79f0fd30c2fc2fc068"],
+                    ph: [null]
+                },
+                attribution_data: {
+                    attribution_share: "0.3"
+                },
+                custom_data: {
+                    currency: "USD",
+                    value: "99.99"
+                },
+                original_event_data: {
+                    event_name: "Purchase",
+                    event_time: Math.floor(Date.now() / 1000)
+                }
+            };
+
+            try {
+                const response = await fetch('/send-event', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(customEvent)
+                });
+                
+                const result = await response.json();
+                showResult(result, response.ok);
+            } catch (error) {
+                showResult({ error: error.message }, false);
+            }
+        }
+
+        function showResult(data, isSuccess) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = `result ${isSuccess ? 'success' : 'error'}`;
+            resultDiv.textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html> 
