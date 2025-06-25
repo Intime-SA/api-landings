@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 3003;
 
 // Middleware CORS para permitir peticiones cross-origin
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3003'],
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:3003', 'https://landing-one-ten.vercel.app'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
