@@ -16,15 +16,15 @@ const corsOptions = {
       'http://localhost:3000', 
       'http://localhost:3003',
       
-      'https://one.invertimeonline.com',
-      'https://two.invertimeonline.com',
-      'https://three.invertimeonline.com',
-      'https://four.invertimeonline.com',
+      'https://one.spazioserver.app',
+      'https://two.spazioserver.app',
+      'https://three.spazioserver.app',
+      'https://four.spazioserver.app',
 
-      'https://one.invertimeonline.com/',
-      'https://two.invertimeonline.com/',
-      'https://three.invertimeonline.com/',
-      'https://four.invertimeonline.com/',
+      'https://one.spazioserver.app',
+      'https://two.spazioserver.app',
+      'https://three.spazioserver.app',
+      'https://four.spazioserver.app',
     ];
     
     // Agregar dominios desde variables de entorno
