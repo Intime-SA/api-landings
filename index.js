@@ -15,12 +15,16 @@ const corsOptions = {
       'http://localhost:5173',
       'http://localhost:3000', 
       'http://localhost:3003',
-      'https://landing-one-ten.vercel.app',
-      'https://landing-one-ten.vercel.app/',
-      'https://landing-two-six.vercel.app/',
-      'https://landing-two-six.vercel.app',
-      'https://landing-three-two.vercel.app',
-      'https://landing-three-two.vercel.app/',
+      
+      'https://one.invertimeonline.com',
+      'https://two.invertimeonline.com',
+      'https://three.invertimeonline.com',
+      'https://four.invertimeonline.com',
+
+      'https://one.invertimeonline.com/',
+      'https://two.invertimeonline.com/',
+      'https://three.invertimeonline.com/',
+      'https://four.invertimeonline.com/',
     ];
     
     // Agregar dominios desde variables de entorno
