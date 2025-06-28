@@ -222,8 +222,17 @@ app.post('/send-event/tracking', async (req, res) => {
       });
     }
 
-
     console.log('Landing encontrado:', landing);
+
+    let localidad = null;
+    if (trackingData.ipAddress) {
+      try {
+        const geoRes = await axios.get(`http://ip-api.com/json/${trackingData.ipAddress}`);
+        localidad = geoRes.data; // puedes filtrar solo lo que te interese
+      } catch (e) {
+        console.warn('No se pudo obtener la localidad:', e.message);
+      }
+    }
 
     // Crear documento de tracking
     const trackingDocument = {
@@ -234,6 +243,7 @@ app.post('/send-event/tracking', async (req, res) => {
       access_token: access_token || null,
       pixel_id: pixel_id || null,
       page_id: landing ? landing._id : null,
+      localidad: localidad,
       created_at: new Date(),
       updated_at: new Date(),
       status: 'active'
