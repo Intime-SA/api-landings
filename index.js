@@ -3,6 +3,10 @@ const bodyParser = require('body-parser');
 const axios = require('axios');
 const path = require('path');
 const cors = require('cors');
+require('dotenv').config();
+
+// Importar configuración de MongoDB
+const { getCasinosDB, getCollection } = require('./lib/mongodb');
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -63,10 +67,260 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'test.html'));
 });
 
+// Endpoint de prueba para verificar conexión a MongoDB
+app.get('/api/health', async (req, res) => {
+  try {
+    const db = await getCasinosDB();
+    const collections = await db.listCollections().toArray();
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'Conexión a MongoDB exitosa',
+      database: 'casinos',
+      collections: collections.map(col => col.name),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error conectando a MongoDB:', error);
+    res.status(500).json({ 
+      error: 'Error conectando a MongoDB', 
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para guardar eventos en MongoDB
+app.post('/api/events', async (req, res) => {
+  try {
+    const { eventData, accessToken, pixelId } = req.body;
+
+    // Validar datos entrantes
+    if (!eventData || !eventData.event_name || !eventData.event_time || !eventData.user_data) {
+      return res.status(400).json({ error: 'Datos del evento incompletos' });
+    }
+
+    // Obtener colección de eventos
+    const eventsCollection = await getCollection('events');
+
+    // Crear documento del evento
+    const eventDocument = {
+      event_name: eventData.event_name,
+      event_time: eventData.event_time,
+      action_source: eventData.action_source || 'website',
+      user_data: eventData.user_data,
+      attribution_data: eventData.attribution_data || {
+        attribution_share: "0.3"
+      },
+      custom_data: eventData.custom_data || {},
+      original_event_data: eventData.original_event_data || {
+        event_name: eventData.event_name,
+        event_time: eventData.event_time
+      },
+      pixel_id: pixelId,
+      access_token: accessToken ? '***' : null, // No guardar el token real
+      created_at: new Date(),
+      status: 'pending' // pending, sent, failed
+    };
+
+    // Guardar en MongoDB
+    const result = await eventsCollection.insertOne(eventDocument);
+
+    console.log('Evento guardado en MongoDB:', {
+      event_name: eventData.event_name,
+      _id: result.insertedId,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(201).json({ 
+      success: true, 
+      message: 'Evento guardado en MongoDB',
+      event_id: result.insertedId
+    });
+  } catch (error) {
+    console.error('Error guardando evento en MongoDB:', error);
+    res.status(500).json({ 
+      error: 'Error guardando el evento', 
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para obtener eventos desde MongoDB
+app.get('/api/events', async (req, res) => {
+  try {
+    const { limit = 10, page = 1, status } = req.query;
+    
+    const eventsCollection = await getCollection('events');
+    
+    // Construir filtro
+    const filter = {};
+    if (status) {
+      filter.status = status;
+    }
+    
+    // Calcular skip para paginación
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Obtener eventos
+    const events = await eventsCollection
+      .find(filter)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+    
+    // Contar total de eventos
+    const total = await eventsCollection.countDocuments(filter);
+    
+    res.status(200).json({
+      success: true,
+      events,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo eventos:', error);
+    res.status(500).json({ 
+      error: 'Error obteniendo eventos', 
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para tracking de usuarios
+app.post('/send-event/tracking', async (req, res) => {
+  try {
+    const { trackingData, events, access_token, pixel_id } = req.body;
+    console.log('Datos de tracking recibidos:', req.body);
+
+    // Validar datos entrantes
+    if (!trackingData) {
+      return res.status(400).json({ error: 'Datos de tracking requeridos' });
+    }
+
+    // Obtener colección data-users
+    const userDataCollection = await getCollection('data-users');
+    // Obtener colección data-pages
+    const pagesCollection = await getCollection('data-pages');
+
+    console.log('Datos de tracking recibidos:', req.body);
+
+    console.log('Tracking data:', trackingData);
+
+    // Buscar landing asociada por access_token o pixel_id
+    let landing = null;
+    if (access_token || pixel_id) {
+      landing = await pagesCollection.findOne({
+        $or: [
+          access_token ? { access_token } : {},
+          pixel_id ? { pixel_id } : {}
+        ]
+      });
+    }
+
+
+    console.log('Landing encontrado:', landing);
+
+    // Crear documento de tracking
+    const trackingDocument = {
+      trackingData: {
+        ...trackingData
+      },
+      events: events || [],
+      access_token: access_token || null,
+      pixel_id: pixel_id || null,
+      page_id: landing ? landing._id : null,
+      created_at: new Date(),
+      updated_at: new Date(),
+      status: 'active'
+    };
+
+    // Guardar en MongoDB
+    const result = await userDataCollection.insertOne(trackingDocument);
+
+    console.log('Datos de tracking guardados exitosamente:', {
+      sessionId: trackingData.sessionId,
+      _id: result.insertedId,
+      page_id: trackingDocument.page_id,
+      events_count: events ? events.length : 0,
+      timestamp: new Date().toISOString()
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Datos de tracking guardados correctamente',
+      tracking_id: result.insertedId,
+      session_id: trackingData.sessionId,
+      page_id: trackingDocument.page_id
+    });
+
+  } catch (error) {
+    console.error('Error guardando datos de tracking:', error);
+    res.status(500).json({
+      error: 'Error guardando los datos de tracking',
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para obtener datos de tracking
+app.get('/api/tracking', async (req, res) => {
+  try {
+    const { limit = 10, page = 1, sessionId, status } = req.query;
+    
+    const userDataCollection = await getCollection('user-data');
+    
+    // Construir filtro
+    const filter = {};
+    if (sessionId) {
+      filter['trackingData.sessionId'] = sessionId;
+    }
+    if (status) {
+      filter.status = status;
+    }
+    
+    // Calcular skip para paginación
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Obtener datos de tracking
+    const trackingData = await userDataCollection
+      .find(filter)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+    
+    // Contar total de registros
+    const total = await userDataCollection.countDocuments(filter);
+    
+    res.status(200).json({
+      success: true,
+      tracking_data: trackingData,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo datos de tracking:', error);
+    res.status(500).json({ 
+      error: 'Error obteniendo datos de tracking', 
+      details: error.message 
+    });
+  }
+});
+
 // Endpoint para enviar eventos a la API de Conversiones
 app.post('/send-event', async (req, res) => {
   try {
     const { eventData, accessToken, pixelId } = req.body;
+    console.log('Datos recibidos:', req.body);
 
     // Validar datos entrantes
     if (!eventData || !eventData.event_name || !eventData.event_time || !eventData.user_data) {
@@ -124,6 +378,44 @@ app.post('/send-event', async (req, res) => {
       }
     );
 
+    console.log('Respuesta de la API de Conversiones:', response.data);
+
+    // Guardar evento exitoso en MongoDB
+    try {
+      const eventsCollection = await getCollection('events');
+      
+      const eventDocument = {
+        event_name: eventData.event_name,
+        event_time: eventData.event_time,
+        action_source: eventData.action_source || 'website',
+        user_data: eventData.user_data,
+        attribution_data: eventData.attribution_data || {
+          attribution_share: "0.3"
+        },
+        custom_data: eventData.custom_data || {},
+        original_event_data: eventData.original_event_data || {
+          event_name: eventData.event_name,
+          event_time: eventData.event_time
+        },
+        pixel_id: pixelId,
+        access_token: '***',
+        created_at: new Date(),
+        status: 'sent',
+        facebook_response: response.data
+      };
+
+      const result = await eventsCollection.insertOne(eventDocument);
+      
+      console.log('Evento guardado exitosamente en MongoDB:', {
+        event_name: eventData.event_name,
+        _id: result.insertedId,
+        timestamp: new Date().toISOString()
+      });
+    } catch (dbError) {
+      console.error('Error guardando evento en DB:', dbError);
+      // No fallar la respuesta principal si falla el guardado en DB
+    }
+
     res.status(200).json({ 
       success: true, 
       message: 'Evento enviado correctamente',
@@ -131,156 +423,45 @@ app.post('/send-event', async (req, res) => {
     });
   } catch (error) {
     console.error('Error enviando evento:', error.response?.data || error.message);
+    
+    // Guardar evento fallido en MongoDB
+    try {
+      const eventsCollection = await getCollection('events');
+      
+      const failedEventDocument = {
+        event_name: req.body.eventData?.event_name,
+        event_time: req.body.eventData?.event_time,
+        action_source: req.body.eventData?.action_source || 'website',
+        user_data: req.body.eventData?.user_data,
+        attribution_data: req.body.eventData?.attribution_data || {
+          attribution_share: "0.3"
+        },
+        custom_data: req.body.eventData?.custom_data || {},
+        original_event_data: req.body.eventData?.original_event_data || {
+          event_name: req.body.eventData?.event_name,
+          event_time: req.body.eventData?.event_time
+        },
+        pixel_id: req.body.pixelId,
+        access_token: '***',
+        created_at: new Date(),
+        status: 'failed',
+        error_details: error.response?.data || error.message
+      };
+
+      const result = await eventsCollection.insertOne(failedEventDocument);
+      
+      console.log('Evento fallido guardado en MongoDB:', {
+        event_name: req.body.eventData?.event_name,
+        _id: result.insertedId,
+        status: 'failed',
+        timestamp: new Date().toISOString()
+      });
+    } catch (dbError) {
+      console.error('Error guardando evento fallido en DB:', dbError);
+    }
+    
     res.status(500).json({ 
       error: 'Error enviando el evento', 
-      details: error.response?.data || error.message 
-    });
-  }
-});
-
-// Endpoint de prueba para simular un evento de compra
-app.post('/test-purchase', async (req, res) => {
-  try {
-    const { accessToken, pixelId } = req.body;
-
-    if (!accessToken) {
-      return res.status(400).json({ error: 'Access Token requerido' });
-    }
-
-    if (!pixelId) {
-      return res.status(400).json({ error: 'Pixel ID requerido' });
-    }
-
-    const testPayload = {
-      data: [
-        {
-          event_name: "Purchase",
-          event_time: Math.floor(Date.now() / 1000),
-          action_source: "website",
-          user_data: {
-            em: [
-              "7b17fb0bd173f625b58636fb796407c22b3d16fc78302d79f0fd30c2fc2fc068"
-            ],
-            ph: [
-              null
-            ]
-          },
-          attribution_data: {
-            attribution_share: "0.3"
-          },
-          custom_data: {
-            currency: "USD",
-            value: "1"
-          },
-          original_event_data: {
-            event_name: "Purchase",
-            event_time: Math.floor(Date.now() / 1000)
-          }
-        }
-      ]
-    };
-
-    console.log('Enviando evento de prueba Purchase:', {
-      pixel_id: pixelId,
-      timestamp: new Date().toISOString()
-    });
-
-    // Llamada a la API de Conversiones
-    const response = await axios.post(
-      `https://graph.facebook.com/v17.0/${pixelId}/events`,
-      testPayload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        params: {
-          access_token: accessToken,
-        },
-      }
-    );
-
-    res.status(200).json({ 
-      success: true, 
-      message: 'Evento de prueba Purchase enviado correctamente',
-      response: response.data 
-    });
-  } catch (error) {
-    console.error('Error en evento de prueba:', error.response?.data || error.message);
-    res.status(500).json({ 
-      error: 'Error enviando el evento de prueba', 
-      details: error.response?.data || error.message 
-    });
-  }
-});
-
-// Endpoint para simular un evento de PageView
-app.post('/test-pageview', async (req, res) => {
-  try {
-    const { accessToken, pixelId } = req.body;
-
-    if (!accessToken) {
-      return res.status(400).json({ error: 'Access Token requerido' });
-    }
-
-    if (!pixelId) {
-      return res.status(400).json({ error: 'Pixel ID requerido' });
-    }
-
-    const testPayload = {
-      data: [
-        {
-          event_name: "PageView",
-          event_time: Math.floor(Date.now() / 1000),
-          action_source: "website",
-          user_data: {
-            em: [
-              "7b17fb0bd173f625b58636fb796407c22b3d16fc78302d79f0fd30c2fc2fc068"
-            ],
-            ph: [
-              null
-            ]
-          },
-          custom_data: {
-            content_name: "Página Principal",
-            content_category: "Homepage",
-            content_type: "product"
-          },
-          original_event_data: {
-            event_name: "PageView",
-            event_time: Math.floor(Date.now() / 1000)
-          }
-        }
-      ]
-    };
-
-    console.log('Enviando evento PageView:', {
-      pixel_id: pixelId,
-      timestamp: new Date().toISOString()
-    });
-
-    // Llamada a la API de Conversiones
-    const response = await axios.post(
-      `https://graph.facebook.com/v17.0/${pixelId}/events`,
-      testPayload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        params: {
-          access_token: accessToken,
-        },
-      }
-    );
-
-    res.status(200).json({ 
-      success: true, 
-      message: 'Evento PageView enviado correctamente',
-      response: response.data 
-    });
-  } catch (error) {
-    console.error('Error en evento PageView:', error.response?.data || error.message);
-    res.status(500).json({ 
-      error: 'Error enviando el evento PageView', 
       details: error.response?.data || error.message 
     });
   }
