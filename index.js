@@ -359,7 +359,10 @@ app.post('/send-event', async (req, res) => {
           attribution_data: eventData.attribution_data || {
             attribution_share: "0.3"
           },
-          custom_data: eventData.custom_data || {},
+          custom_data: {
+            value: parseFloat(eventData.custom_data.value) || 0,
+            currency: eventData.custom_data.currency || "USD"
+          },
           original_event_data: eventData.original_event_data || {
             event_name: eventData.event_name,
             event_time: eventData.event_time
@@ -367,6 +370,14 @@ app.post('/send-event', async (req, res) => {
         },
       ],
     };
+
+    // Asegurar que value sea un número válido
+    if (eventData.custom_data && eventData.custom_data.value) {
+      const numericValue = parseFloat(eventData.custom_data.value);
+      if (!isNaN(numericValue)) {
+        payload.data[0].custom_data.value = numericValue;
+      }
+    }
 
     console.log('Enviando evento:', {
       event_name: eventData.event_name,
@@ -402,7 +413,10 @@ app.post('/send-event', async (req, res) => {
         attribution_data: eventData.attribution_data || {
           attribution_share: "0.3"
         },
-        custom_data: eventData.custom_data || {},
+        custom_data: {
+          value: parseFloat(eventData.custom_data.value) || 0,
+          currency: eventData.custom_data.currency || "USD"
+        },
         original_event_data: eventData.original_event_data || {
           event_name: eventData.event_name,
           event_time: eventData.event_time
