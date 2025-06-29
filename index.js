@@ -148,7 +148,7 @@ app.post('/api/events', async (req, res) => {
 // Endpoint para obtener eventos desde MongoDB
 app.get('/api/events', async (req, res) => {
   try {
-    const { limit = 10, page = 1, status } = req.query;
+    const { limit = 10, page = 1, status, visit_uid } = req.query;
     
     const eventsCollection = await getCollection('events');
     
@@ -156,6 +156,9 @@ app.get('/api/events', async (req, res) => {
     const filter = {};
     if (status) {
       filter.status = status;
+    }
+    if (visit_uid) {
+      filter.visit_uid = visit_uid;
     }
     
     // Calcular skip para paginación
@@ -243,6 +246,7 @@ app.post('/send-event/tracking', async (req, res) => {
       access_token: access_token || null,
       pixel_id: pixel_id || null,
       page_id: landing ? landing._id : null,
+      visit_uid: trackingData.visitUid || null,
       localidad: localidad,
       created_at: new Date(),
       updated_at: new Date(),
@@ -254,6 +258,7 @@ app.post('/send-event/tracking', async (req, res) => {
 
     console.log('Datos de tracking guardados exitosamente:', {
       sessionId: trackingData.sessionId,
+      visitUid: trackingData.visitUid,
       _id: result.insertedId,
       page_id: trackingDocument.page_id,
       events_count: events ? events.length : 0,
@@ -265,6 +270,7 @@ app.post('/send-event/tracking', async (req, res) => {
       message: 'Datos de tracking guardados correctamente',
       tracking_id: result.insertedId,
       session_id: trackingData.sessionId,
+      visit_uid: trackingData.visitUid,
       page_id: trackingDocument.page_id
     });
 
@@ -280,9 +286,9 @@ app.post('/send-event/tracking', async (req, res) => {
 // Endpoint para obtener datos de tracking
 app.get('/api/tracking', async (req, res) => {
   try {
-    const { limit = 10, page = 1, sessionId, status } = req.query;
+    const { limit = 10, page = 1, sessionId, status, visit_uid } = req.query;
     
-    const userDataCollection = await getCollection('user-data');
+    const userDataCollection = await getCollection('data-users');
     
     // Construir filtro
     const filter = {};
@@ -291,6 +297,9 @@ app.get('/api/tracking', async (req, res) => {
     }
     if (status) {
       filter.status = status;
+    }
+    if (visit_uid) {
+      filter.visit_uid = visit_uid;
     }
     
     // Calcular skip para paginación
@@ -326,10 +335,61 @@ app.get('/api/tracking', async (req, res) => {
   }
 });
 
+// Endpoint para obtener datos completos por visit_uid (eventos + tracking)
+app.get('/api/visit/:visitUid', async (req, res) => {
+  try {
+    const { visitUid } = req.params;
+    
+    if (!visitUid) {
+      return res.status(400).json({ error: 'visit_uid requerido' });
+    }
+    
+    const eventsCollection = await getCollection('events');
+    const userDataCollection = await getCollection('data-users');
+    
+    // Obtener eventos por visit_uid
+    const events = await eventsCollection
+      .find({ visit_uid: visitUid })
+      .sort({ created_at: -1 })
+      .toArray();
+    
+    // Obtener datos de tracking por visit_uid
+    const trackingData = await userDataCollection
+      .find({ visit_uid: visitUid })
+      .sort({ created_at: -1 })
+      .toArray();
+    
+    res.status(200).json({
+      success: true,
+      visit_uid: visitUid,
+      events: events,
+      tracking_data: trackingData,
+      summary: {
+        total_events: events.length,
+        total_tracking_sessions: trackingData.length,
+        events_by_status: events.reduce((acc, event) => {
+          acc[event.status] = (acc[event.status] || 0) + 1;
+          return acc;
+        }, {}),
+        event_types: events.reduce((acc, event) => {
+          acc[event.event_name] = (acc[event.event_name] || 0) + 1;
+          return acc;
+        }, {})
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo datos por visit_uid:', error);
+    res.status(500).json({ 
+      error: 'Error obteniendo datos por visit_uid', 
+      details: error.message 
+    });
+  }
+});
+
 // Endpoint para enviar eventos a la API de Conversiones
 app.post('/send-event', async (req, res) => {
   try {
-    const { eventData, accessToken, pixelId } = req.body;
+    const { eventData, accessToken, pixelId, visitUid } = req.body;
     console.log('Datos recibidos:', req.body);
 
     // Validar datos entrantes
@@ -343,6 +403,17 @@ app.post('/send-event', async (req, res) => {
 
     if (!pixelId) {
       return res.status(400).json({ error: 'Pixel ID requerido' });
+    }
+
+    // Preparar custom_data con visit_uid
+    const customData = {
+      value: parseFloat(eventData.custom_data?.value) || 0,
+      currency: eventData.custom_data?.currency || "USD"
+    };
+
+    // Agregar visit_uid si está disponible (desde el body o desde custom_data)
+    if (visitUid || eventData.custom_data?.visit_uid) {
+      customData.visit_uid = visitUid || eventData.custom_data.visit_uid;
     }
 
     // Configuración del payload
@@ -359,10 +430,7 @@ app.post('/send-event', async (req, res) => {
           attribution_data: eventData.attribution_data || {
             attribution_share: "0.3"
           },
-          custom_data: {
-            value: parseFloat(eventData.custom_data.value) || 0,
-            currency: eventData.custom_data.currency || "USD"
-          },
+          custom_data: customData,
           original_event_data: eventData.original_event_data || {
             event_name: eventData.event_name,
             event_time: eventData.event_time
@@ -382,6 +450,7 @@ app.post('/send-event', async (req, res) => {
     console.log('Enviando evento:', {
       event_name: eventData.event_name,
       pixel_id: pixelId,
+      visit_uid: customData.visit_uid,
       timestamp: new Date().toISOString()
     });
 
@@ -413,16 +482,14 @@ app.post('/send-event', async (req, res) => {
         attribution_data: eventData.attribution_data || {
           attribution_share: "0.3"
         },
-        custom_data: {
-          value: parseFloat(eventData.custom_data.value) || 0,
-          currency: eventData.custom_data.currency || "USD"
-        },
+        custom_data: customData,
         original_event_data: eventData.original_event_data || {
           event_name: eventData.event_name,
           event_time: eventData.event_time
         },
         pixel_id: pixelId,
         access_token: '***',
+        visit_uid: customData.visit_uid,
         created_at: new Date(),
         status: 'sent',
         facebook_response: response.data
@@ -433,6 +500,7 @@ app.post('/send-event', async (req, res) => {
       console.log('Evento guardado exitosamente en MongoDB:', {
         event_name: eventData.event_name,
         _id: result.insertedId,
+        visit_uid: customData.visit_uid,
         timestamp: new Date().toISOString()
       });
     } catch (dbError) {
@@ -443,7 +511,8 @@ app.post('/send-event', async (req, res) => {
     res.status(200).json({ 
       success: true, 
       message: 'Evento enviado correctamente',
-      response: response.data 
+      response: response.data,
+      visit_uid: customData.visit_uid
     });
   } catch (error) {
     console.error('Error enviando evento:', error.response?.data || error.message);
@@ -451,6 +520,15 @@ app.post('/send-event', async (req, res) => {
     // Guardar evento fallido en MongoDB
     try {
       const eventsCollection = await getCollection('events');
+      
+      const customData = {
+        value: parseFloat(req.body.eventData?.custom_data?.value) || 0,
+        currency: req.body.eventData?.custom_data?.currency || "USD"
+      };
+
+      if (req.body.visitUid || req.body.eventData?.custom_data?.visit_uid) {
+        customData.visit_uid = req.body.visitUid || req.body.eventData?.custom_data?.visit_uid;
+      }
       
       const failedEventDocument = {
         event_name: req.body.eventData?.event_name,
@@ -460,13 +538,14 @@ app.post('/send-event', async (req, res) => {
         attribution_data: req.body.eventData?.attribution_data || {
           attribution_share: "0.3"
         },
-        custom_data: req.body.eventData?.custom_data || {},
+        custom_data: customData,
         original_event_data: req.body.eventData?.original_event_data || {
           event_name: req.body.eventData?.event_name,
           event_time: req.body.eventData?.event_time
         },
         pixel_id: req.body.pixelId,
         access_token: '***',
+        visit_uid: customData.visit_uid,
         created_at: new Date(),
         status: 'failed',
         error_details: error.response?.data || error.message
@@ -477,6 +556,7 @@ app.post('/send-event', async (req, res) => {
       console.log('Evento fallido guardado en MongoDB:', {
         event_name: req.body.eventData?.event_name,
         _id: result.insertedId,
+        visit_uid: customData.visit_uid,
         status: 'failed',
         timestamp: new Date().toISOString()
       });
