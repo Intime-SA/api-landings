@@ -4,6 +4,7 @@ const axios = require('axios');
 const path = require('path');
 const cors = require('cors');
 require('dotenv').config();
+const { ObjectId } = require('mongodb');
 
 // Importar configuración de MongoDB
 const { getCasinosDB, getCollection } = require('./lib/mongodb');
@@ -189,6 +190,52 @@ app.get('/api/events', async (req, res) => {
     console.error('Error obteniendo eventos:', error);
     res.status(500).json({ 
       error: 'Error obteniendo eventos', 
+      details: error.message 
+    });
+  }
+});
+
+// Endpoint para obtener eventos desde MongoDB
+app.get('/api/pages', async (req, res) => {
+  try {
+    const { limit = 10, page = 1, status} = req.query;
+    
+    const pagesCollection = await getCollection('data-pages');
+    
+    // Construir filtro
+    const filter = {};
+    if (status) {
+      filter.status = status;
+    }
+    
+    // Calcular skip para paginación
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Obtener eventos
+    const pages = await pagesCollection
+      .find(filter)
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .toArray();
+    
+    // Contar total de eventos
+    const total = await pagesCollection.countDocuments(filter);
+    
+    res.status(200).json({
+      success: true,
+      pages,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Error obteniendo páginas:', error);
+    res.status(500).json({ 
+      error: 'Error obteniendo páginas', 
       details: error.message 
     });
   }
@@ -568,6 +615,151 @@ app.post('/send-event', async (req, res) => {
       error: 'Error enviando el evento', 
       details: error.response?.data || error.message 
     });
+  }
+});
+
+// Endpoint para KPIs globales
+app.get('/api/kpis', async (req, res) => {
+  try {
+    const { from, to, pageId } = req.query;
+    console.log('--- INICIO /api/kpis ---');
+    console.log('Params:', { from, to, pageId });
+    if (!from || !to || !pageId) {
+      console.log('Faltan parámetros');
+      return res.status(400).json({ error: 'Parámetros from, to y pageId requeridos' });
+    }
+
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    const diffMs = toDate - fromDate;
+    const prevFrom = new Date(fromDate.getTime() - diffMs);
+    const prevTo = new Date(fromDate.getTime());
+    console.log('Fechas:', { fromDate, toDate, prevFrom, prevTo });
+
+    let pageObjectId;
+    try {
+      pageObjectId = new ObjectId(pageId);
+    } catch (e) {
+      console.log('Error convirtiendo pageId a ObjectId:', e);
+      return res.status(400).json({ error: 'pageId inválido' });
+    }
+
+    const userDataCollection = await getCollection('data-users');
+    const eventsCollection = await getCollection('events');
+    console.log(userDataCollection, 'userDataCollection')
+    console.log(eventsCollection, 'eventsCollection')
+    console.log('Colecciones obtenidas');
+
+    // --- FUNCIONES AUXILIARES ---
+    const getTracking = async (start, end) => {
+      const filtro = {
+        page_id: pageObjectId,
+        created_at: { $gte: start, $lte: end }
+      };
+      console.log('Filtro tracking:', filtro);
+      const arr = await userDataCollection.find(filtro).toArray();
+      console.log(`Tracking encontrados (${start.toISOString()} - ${end.toISOString()}):`, arr.length);
+      return arr;
+    };
+    const getEvents = async (start, end) => {
+      const filtro = {
+        created_at: { $gte: start, $lte: end },
+        event_name: 'Purchase'
+      };
+      console.log('Filtro events:', filtro);
+      const arr = await eventsCollection.find(filtro).toArray();
+      console.log(`Events encontrados (${start.toISOString()} - ${end.toISOString()}):`, arr.length);
+      return arr;
+    };
+
+    // --- DATOS ACTUALES ---
+    const tracking = await getTracking(fromDate, toDate);
+    const events = await getEvents(fromDate, toDate);
+    console.log('Tracking actual:', tracking.map(t => t.visit_uid));
+    console.log('Events actual:', events.map(e => e.visit_uid));
+    console.log('Ejemplo tracking:', tracking.slice(0, 3));
+    console.log('Ejemplo events:', events.slice(0, 3));
+
+    // --- DATOS PERÍODO ANTERIOR ---
+    const trackingPrev = await getTracking(prevFrom, prevTo);
+    const eventsPrev = await getEvents(prevFrom, prevTo);
+    console.log('Tracking previo:', trackingPrev.map(t => t.visit_uid));
+    console.log('Events previo:', eventsPrev.map(e => e.visit_uid));
+
+    // --- KPIs ACTUALES ---
+    const visitantesTotales = tracking.length;
+    const tiempoPromedio = visitantesTotales > 0 ? Math.round(tracking.reduce((acc, t) => acc + (t.trackingData.totalActiveTime || 0), 0) / visitantesTotales) : 0;
+    const uidsTracking = new Set(tracking.map(t => t.visit_uid));
+    const uidsPurchase = new Set(events.map(e => e.visit_uid));
+    const conversion = visitantesTotales > 0 ? (Array.from(uidsPurchase).filter(uid => uidsTracking.has(uid)).length / visitantesTotales) * 100 : 0;
+    const registrosCasino = 0;
+    console.log('KPIs actuales:', { visitantesTotales, tiempoPromedio, uidsTracking: Array.from(uidsTracking), uidsPurchase: Array.from(uidsPurchase), conversion, registrosCasino });
+
+    // --- KPIs ANTERIORES ---
+    const visitantesTotalesPrev = trackingPrev.length;
+    const tiempoPromedioPrev = visitantesTotalesPrev > 0 ? Math.round(trackingPrev.reduce((acc, t) => acc + (t.trackingData.totalActiveTime || 0), 0) / visitantesTotalesPrev) : 0;
+    const uidsTrackingPrev = new Set(trackingPrev.map(t => t.visit_uid));
+    const uidsPurchasePrev = new Set(eventsPrev.map(e => e.visit_uid));
+    const conversionPrev = visitantesTotalesPrev > 0 ? (Array.from(uidsPurchasePrev).filter(uid => uidsTrackingPrev.has(uid)).length / visitantesTotalesPrev) * 100 : 0;
+    const registrosCasinoPrev = 0;
+    console.log('KPIs previos:', { visitantesTotalesPrev, tiempoPromedioPrev, uidsTrackingPrev: Array.from(uidsTrackingPrev), uidsPurchasePrev: Array.from(uidsPurchasePrev), conversionPrev, registrosCasinoPrev });
+
+    function calcVar(actual, previo) {
+      if (previo === 0) return actual === 0 ? 0 : 100;
+      return ((actual - previo) / previo) * 100;
+    }
+
+    const respuesta = {
+      visitantesTotales: {
+        valor: visitantesTotales,
+        variacion: calcVar(visitantesTotales, visitantesTotalesPrev)
+      },
+      tiempoPromedio: {
+        valor: tiempoPromedio, // en segundos
+        variacion: calcVar(tiempoPromedio, tiempoPromedioPrev)
+      },
+      tasaConversion: {
+        valor: parseFloat(conversion.toFixed(2)),
+        variacion: calcVar(conversion, conversionPrev)
+      },
+      registrosCasino: {
+        valor: registrosCasino,
+        variacion: calcVar(registrosCasino, registrosCasinoPrev)
+      },
+      periodo: {
+        actual: { from, to },
+        anterior: { from: prevFrom.toISOString(), to: prevTo.toISOString() }
+      }
+    };
+    console.log('Respuesta final:', respuesta);
+    res.json(respuesta);
+  } catch (error) {
+    console.error('Error calculando KPIs:', error);
+    res.status(500).json({ error: 'Error calculando KPIs', details: error.message });
+  }
+});
+
+// Endpoint para guardar el inicio de la visita (init-tracking)
+app.post('/send-event/init-tracking', async (req, res) => {
+  try {
+    const { access_token, pixel_id, visitUid } = req.body;
+
+     if (!visitUid || !access_token || !pixel_id) {
+      return res.status(400).json({ error: 'Faltan datos obligatorios: visitUid, sessionId, page_id, timestamp' });
+    }
+    const initTrackingCollection = await getCollection('init-tracking');
+    const doc = {
+      visitUid,
+      pixel_id: pixel_id || null,
+      access_token: access_token || null,
+      created_at: new Date(),
+      status: 'init'
+    };
+    const result = await initTrackingCollection.insertOne(doc);
+    res.status(201).json({ success: true, message: 'Init tracking guardado', _id: result.insertedId, visitUid });
+  } catch (error) {
+    console.error('Error en /api/init-tracking:', error);
+    res.status(500).json({ error: 'Error guardando init tracking', details: error.message });
   }
 });
 
