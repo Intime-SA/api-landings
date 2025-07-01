@@ -25,11 +25,12 @@ const corsOptions = {
       'https://two.spazioserver.app',
       'https://three.spazioserver.app',
       'https://four.spazioserver.app',
-
-      'https://one.spazioserver.app',
-      'https://two.spazioserver.app',
-      'https://three.spazioserver.app',
-      'https://four.spazioserver.app',
+      'https://five.spazioserver.app',
+      'https://six.spazioserver.app',
+      'https://seven.spazioserver.app',
+      'https://eight.spazioserver.app',
+      'https://nine.spazioserver.app',
+      'https://ten.spazioserver.app',
     ];
     
     // Agregar dominios desde variables de entorno
