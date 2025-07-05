@@ -37,6 +37,7 @@ const corsOptions = {
       // eze
       'https://one.mooneymaker.club',
       'https://three.mooneymaker.club',
+      'https://register.mooneymaker.club',
 
       // guty
       'https://two.mooneymaker.club',
