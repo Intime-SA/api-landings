@@ -17,24 +17,30 @@ const corsOptions = {
   origin: function (origin, callback) {
     // Lista de dominios permitidos
     const allowedOrigins = [
+      //local
       'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:3001',
+      'http://localhost:3002',
       'http://localhost:3003',
       
+       // nico
       'https://one.spazioserver.app',
       'https://two.spazioserver.app',
       'https://three.spazioserver.app',
       'https://four.spazioserver.app',
       'https://five.spazioserver.app',
-      'https://six.spazioserver.app',
       'https://seven.spazioserver.app',
-      'https://eight.spazioserver.app',
+      'https://eigth.spazioserver.app',
       'https://nine.spazioserver.app',
       'https://ten.spazioserver.app',
 
+      //eze
       'https://one.mooneymaker.club',
       'https://three.mooneymaker.club',
+
+      //guty
+      'https://six.spazioserver.app',
     ];
     
     // Agregar dominios desde variables de entorno
