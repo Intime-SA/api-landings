@@ -508,7 +508,7 @@ app.post('/send-event', async (req, res) => {
     console.log('Enviando evento:', {
       event_name: eventData.event_name,
       pixel_id: pixelId,
-      visit_uid: customData.visit_uid,
+      event_id: customData.visit_uid,
       timestamp: new Date().toISOString()
     });
 
