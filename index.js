@@ -479,11 +479,13 @@ app.post('/send-event', async (req, res) => {
       data: [
         {
           event_name: eventData.event_name,
+          event_id: eventData.event_id,
           event_time: eventData.event_time,
           action_source: eventData.action_source || 'website',
           user_data: {
             em: eventData.user_data.em || [],
             ph: eventData.user_data.ph || [],
+            
           },
           attribution_data: eventData.attribution_data || {
             attribution_share: "0.3"
@@ -506,10 +508,7 @@ app.post('/send-event', async (req, res) => {
     }
 
     console.log('Enviando evento:', {
-      event_name: eventData.event_name,
-      pixel_id: pixelId,
-      event_id: customData.visit_uid,
-      timestamp: new Date().toISOString()
+      payload: JSON.stringify(payload, null, 2)
     });
 
     // Llamada a la API de Conversiones
