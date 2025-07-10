@@ -41,6 +41,12 @@ const corsOptions = {
 
       // guty
       'https://two.mooneymaker.club',
+
+      // lauti pibe
+      'https://landing-aparte-sable.vercel.app',
+
+      // alpaca
+      'https://one-alpacabet.vercel.app'
     ];
     
     // Agregar dominios desde variables de entorno
