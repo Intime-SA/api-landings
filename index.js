@@ -38,9 +38,10 @@ const corsOptions = {
       'https://one.mooneymaker.club',
       'https://three.mooneymaker.club',
       'https://register.mooneymaker.club',
+      'https://1.mooneymaker.club',
 
       // guty
-      'https://two.mooneymaker.club',
+      'https://two.mooneymaker.club', 
 
       // lauti pibe
       'https://landing-aparte-sable.vercel.app',
