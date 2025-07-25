@@ -47,7 +47,13 @@ const corsOptions = {
       'https://landing-aparte-sable.vercel.app',
 
       // alpaca
-      'https://one-alpacabet.vercel.app'
+      'https://one-alpacabet.vercel.app',
+
+      'https://app.crossup.ai',
+      'https://afiliados.sportsbet.bet.ar',
+
+      //dashboard
+      "https://sistema-publicidad.vercel.app"
     ];
     
     // Agregar dominios desde variables de entorno
@@ -777,6 +783,19 @@ app.post('/send-event/init-tracking', async (req, res) => {
   } catch (error) {
     console.error('Error en /api/init-tracking:', error);
     res.status(500).json({ error: 'Error guardando init tracking', details: error.message });
+  }
+});
+
+// Endpoint para guardar un body en la colección 'test'
+app.post('/api/test', async (req, res) => {
+  try {
+    const testCollection = await getCollection('test');
+    const result = await testCollection.insertOne(req.body);
+    console.log('Documento guardado en la colección test:', result.insertedId);
+    res.status(201).json({ success: true, message: 'Documento guardado', document_id: result.insertedId });
+  } catch (error) {
+    console.error('Error guardando documento en la colección test:', error);
+    res.status(500).json({ error: 'Error guardando el documento', details: error.message });
   }
 });
 
